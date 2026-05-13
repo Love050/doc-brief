@@ -1,0 +1,11 @@
+{
+  "name": "docbrief-proxy",
+  "version": "1.0.0",
+  "description": "Small proxy for DocBrief to keep Gemini API key server-side",
+  "main": "server.js",
+  "engines": {"node": ">=18"},
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

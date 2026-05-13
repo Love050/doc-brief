@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DocBrief — Walk into your doctor's appointment with clarity</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root{
+      --bg:#0a0f1a;
+      --accent:#00e5b0;
+      --accent2:#4f8aff;
+      --text:#f0f4ff;
+      --card:#121929;
+      --muted:rgba(240,244,255,0.65);
+      --card-border:rgba(0,229,176,0.15);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;font-family:'DM Sans',system-ui,Arial; background:var(--bg); color:var(--text);
+      -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+      overflow-y:auto;
+    }
+    /* animated mesh background */
+    .mesh{
+      position:fixed;inset:0;z-index:0;pointer-events:none;background:
+      radial-gradient(800px 400px at 10% 10%, rgba(79,138,255,0.06), transparent),
+      radial-gradient(600px 300px at 85% 80%, rgba(0,229,176,0.04), transparent);
+      animation:move 18s linear infinite;
+      mix-blend-mode:screen;
+    }
+    @keyframes move{0%{transform:translateY(0)}50%{transform:translateY(-20px)}100%{transform:translateY(0)}}
+
+    .app{position:relative;z-index:1;max-width:980px;margin:36px auto;padding:28px}
+    header{display:flex;align-items:center;gap:18px}
+    .logo{font-family:'Syne';font-weight:800;font-size:28px}
+    .logo .doc{color:var(--accent)}
+    .logo .brief{color:#fff}
+    .tag{color:var(--muted);font-size:13px}
+
+    /* progress bar */
+    .progress{height:8px;background:linear-gradient(90deg, rgba(255,255,255,0.03), transparent);border-radius:999px;margin-top:18px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width .45s ease}
+
+    .card{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:20px;margin-top:18px;box-shadow:0 6px 18px rgba(0,0,0,0.35)}
+    h1{font-family:'Syne';margin:0 0 8px 0}
+    .step-title{font-size:18px;margin-bottom:12px}
+
+    /* layout */
+    .controls{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .left, .right{display:flex;gap:8px;align-items:center}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer;min-height:44px}
+    button.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#021018;border:none;box-shadow:0 6px 20px rgba(0,229,176,0.12)}
+    button:hover{box-shadow:0 6px 22px rgba(0,229,176,0.12)}
+
+    /* step content */
+    .steps{position:relative;overflow:hidden}
+    .step{display:none;opacity:0;transform:translateY(10px);transition:opacity 0.36s ease, transform 0.36s ease}
+    .step.active{display:block}
+    .step.visible{opacity:1;transform:translateY(0)}
+
+    /* upload */
+    .upload-zone{border:2px dashed rgba(255,255,255,0.06);padding:26px;border-radius:12px;text-align:center;cursor:pointer}
+    .upload-zone.drag{background:rgba(0,0,0,0.04)}
+    .files-list{margin-top:12px;font-size:13px;color:var(--muted)}
+
+    label{display:block;font-size:13px;margin:8px 0 6px;color:var(--muted)}
+    input[type=text],input[type=number],select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text)}
+    textarea{min-height:80px;resize:vertical}
+
+    .row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    @media(max-width:720px){.row{grid-template-columns:1fr}}
+
+    .small{font-size:13px;color:var(--muted)}
+
+    /* slider */
+    .slider{display:flex;gap:12px;align-items:center}
+    input[type=range]{flex:1}
+
+    /* generating */
+    .pulse{display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px}
+    .logo-large{font-family:'Syne';font-size:48px}
+    .dots{height:6px;width:6px;background:var(--accent);border-radius:50%;animation:beat 1s infinite}
+    @keyframes beat{50%{transform:scale(1.6);opacity:.6}}
+
+    /* results */
+    .results-grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(max-width:880px){.results-grid{grid-template-columns:1fr}}
+    .summary-card{background:#f8fbff;color:#0d1a2a;border-left:6px solid var(--accent)}
+    .assessment-card{background:var(--card);border-left:6px solid var(--accent2)}
+    .assessment-card h3,.assessment-card h4{color:var(--text)}
+    .assessment-card ul{margin:8px 0 0 18px;padding:0}
+
+    footer{margin-top:22px;color:var(--muted);font-size:13px;text-align:center}
+
+    /* print CSS */
+    @media print{
+      body *{visibility:hidden}
+      #printable, #printable *{visibility:visible}
+      #printable{position:fixed;left:0;top:0;width:100%}
+    }
+
+    @media(max-width:480px){
+      .app{padding:16px;margin:12px auto}
+      .card{padding:14px}
+    }
+
+    /* language selector */
+    .lang{font-size:13px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04)}
+  </style>
+</head>
+<body>
+  <div class="mesh" aria-hidden></div>
+  <div class="app">
+    <header>
+      <div>
+        <div class="logo"><span class="doc">Doc</span><span class="brief">Brief</span></div>
+        <div class="tag">Walk into your doctor's appointment with clarity.</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:12px;align-items:center">
+        <select id="lang" class="lang" title="Language"></select>
+      </div>
+    </header>
+    <div id="notify" style="margin-top:12px"></div>
+
+    <div class="progress" aria-hidden><i id="progressFill"></i></div>
+
+    <div class="card">
+      <div class="controls">
+        <div class="left"><div id="stepIndicator">Step 1 of 7</div></div>
+        <div class="right">
+          <button id="backBtn">Back</button>
+          <button id="skipBtn">Skip</button>
+        </div>
+      </div>
+
+      <div class="steps">
+        <!-- Step 1 -->
+        <div class="step active visible" data-step="1">
+          <h1 class="step-title" id="s1title">Start with your reports</h1>
+          <div class="small">Upload recent health reports (CBC, urine, thyroid, X-ray, etc.) — optional but recommended</div>
+          <div id="uploadZone" class="upload-zone" tabindex="0">Drag & drop files here, or click to select (PDF, JPG, PNG)</div>
+          <input type="file" id="fileInput" multiple accept="application/pdf,image/*" style="display:none">
+          <div class="files-list" id="filesList"></div>
+          <div style="display:flex;gap:10px;margin-top:14px"><button id="toStep2" class="primary">Continue</button><button id="skipReports">Skip</button></div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step" data-step="2">
+          <h1 class="step-title" id="s2title">Tell us about yourself</h1>
+          <div class="row">
+            <div>
+              <label for="name">Name</label>
+              <input id="name" type="text" placeholder="Full name">
+            </div>
+            <div>
+              <label for="age">Age</label>
+              <input id="age" type="number" min="0" placeholder="Years">
+            </div>
+            <div>
+              <label for="gender">Gender</label>
+              <select id="gender"><option>Male</option><option>Female</option><option>Other</option></select>
+            </div>
+            <div>
+              <label for="weight">Weight (kg)</label>
+              <input id="weight" type="number" min="0">
+            </div>
+            <div>
+              <label for="height">Height (cm)</label>
+              <input id="height" type="number" min="0">
+            </div>
+            <div>
+              <label for="city">City (optional)</label>
+              <input id="city" type="text">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px"><button id="toStep3" class="primary">Continue</button></div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step" data-step="3">
+          <h1 class="step-title">Your current health status</h1>
+          <label>Known conditions / diseases</label>
+          <textarea id="conditions" placeholder="e.g. diabetes, hypertension, asthma"></textarea>
+          <label>Current medicines</label>
+          <textarea id="medicines" placeholder="List names and doses if known"></textarea>
+          <label>Supplements</label>
+          <textarea id="supplements" placeholder="Vitamins, protein, anything else"></textarea>
+          <label>Known allergies (optional)</label>
+          <textarea id="allergies" placeholder="e.g. penicillin"></textarea>
+          <div style="display:flex;gap:10px;margin-top:14px"><button id="toStep4" class="primary">Continue</button></div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="step" data-step="4">
+          <h1 class="step-title">Your recent lifestyle</h1>
+          <label>Diet this week</label>
+          <textarea id="diet" placeholder="What have you been eating roughly?"></textarea>
+          <div class="row">
+            <div>
+              <label>Average daily steps (optional)</label>
+              <input id="steps" type="number" min="0">
+            </div>
+            <div>
+              <label>Average heart rate (optional)</label>
+              <input id="heartrate" type="number" min="0">
+            </div>
+            <div>
+              <label>Average sleep hours</label>
+              <input id="sleep" type="number" min="0" step="0.1">
+            </div>
+            <div>
+              <label>Stress level</label>
+              <select id="stress"><option>Low</option><option>Medium</option><option>High</option><option>Very High</option></select>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px"><button id="toStep5" class="primary">Continue</button></div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="step" data-step="5">
+          <h1 class="step-title">Your complaints right now</h1>
+          <div class="small">DocBrief helps you communicate with your doctor. It does not diagnose conditions.</div>
+          <label>Main complaints</label>
+          <textarea id="complaints" placeholder="What's bothering you? Describe in your own words"></textarea>
+          <label>Where is the pain/discomfort? (optional)</label>
+          <input id="painLocation" type="text">
+          <label>How long has this been going on?</label>
+          <input id="duration" type="text" placeholder="e.g. 3 days, 2 weeks">
+          <label>Pain severity</label>
+          <div class="slider"><input id="pain" type="range" min="1" max="10" value="3"><div id="painLabel">Moderate</div></div>
+          <label>Anything that makes it worse or better? (optional)</label>
+          <textarea id="modifiers"></textarea>
+          <div style="display:flex;gap:10px;margin-top:14px"><button id="toStep6" class="primary">Generate Brief</button></div>
+        </div>
+
+        <!-- Step 6 Generating -->
+        <div class="step" data-step="6">
+          <div class="pulse">
+            <div class="logo-large"><span class="doc">Doc</span><span class="brief">Brief</span></div>
+            <div id="genText">Reading your reports...</div>
+            <div style="height:12px;display:flex;gap:6px;align-items:center"><div class="dots"></div><div class="dots" style="animation-delay:.15s"></div><div class="dots" style="animation-delay:.3s"></div></div>
+          </div>
+        </div>
+
+        <!-- Step 7 Results -->
+        <div class="step" data-step="7">
+          <div id="printable">
+            <h1>Your DocBrief</h1>
+            <div class="results-grid">
+              <div class="card summary-card">
+                <h3>Patient Summary for Doctor</h3>
+                <div id="summaryCard"></div>
+              </div>
+              <div class="card assessment-card">
+                <h3>AI Assessment</h3>
+                <div id="aiAssessment"></div>
+                <p style="margin:12px 0 0 0;font-weight:700">This is not a medical diagnosis. Always consult your doctor.</p>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:16px"><button id="printBtn" class="primary">Download as PDF</button><button id="shareBtn">Share</button><button id="restartBtn">Start Over</button></div>
+            <div style="margin-top:10px;color:var(--muted);font-size:13px">DocBrief is not a medical service. Always consult a qualified doctor.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer>DocBrief is not a medical service. Always consult a qualified doctor.</footer>
+  </div>
+
+  <script>
+    // ========== Configuration ==========
+    // API key intentionally blank; use the server-side proxy (.env) for production.
+    const API_KEY = '';
+
+    // Proxy support: enable by setting localStorage 'DOCBRIEF_USE_PROXY' to '1'
+    const USE_PROXY = localStorage.getItem('DOCBRIEF_USE_PROXY') === '1';
+    const MODEL_NAME = 'gemini-2.5-flash';
+    const GEMINI_ENDPOINT = USE_PROXY ? '/generate' : `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+
+    // file size limits
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB per file
+    const MAX_TOTAL_SIZE = 30 * 1024 * 1024; // 30 MB total
+    const MAX_FILES_FOR_AI = 2;
+    const MAX_FIELD_CHARS = 280;
+
+    function notify(html, level='info'){
+      const n = document.getElementById('notify'); if(!n) return; n.innerHTML = `<div style="padding:10px;border-radius:8px;background:${level==='error'?'rgba(255,40,60,0.08)':'rgba(0,229,176,0.06)'};color:var(--text);border:1px solid rgba(255,255,255,0.02)">${html}</div>`;
+    }
+
+    function clearNotify(){const n=document.getElementById('notify'); if(n) n.innerHTML=''}
+
+    // Simple i18n (English + sample Indian languages). Add more translations as needed.
+    const LOCALES = {
+      en: {name:'English', start:'Start with your reports', continue:'Continue', skip:'Skip', generate:'Generate brief'},
+      hi: {name:'हिन्दी', start:'रिपोर्ट से शुरू करें', continue:'जारी रखें', skip:'छोड़ें', generate:'सार बनाएं'},
+      ta: {name:'தமிழ்', start:'உங்கள் தகவல்களுடன் தொடங்கவும்', continue:'தொடரவும்', skip:'விலக்கவும்', generate:'உரை தயாரிக்கவும்'},
+      mr: {name:'मराठी', start:'आपल्या अहवालासह प्रारंभ करा', continue:'सुरू ठेवा', skip:'वगळा', generate:'सार तयार करा'}
+    };
+
+    // ========== State ==========
+    const state = {
+      step:1, files:[], filePreviews:[], ocrText:'', form:{}, ocrPromises:[]
+    };
+
+    function trackOcrPromise(promise){
+      state.ocrPromises.push(promise);
+      promise.finally(()=>{
+        state.ocrPromises = state.ocrPromises.filter(p => p !== promise);
+      });
+    }
+
+    // ========== DOM refs ==========
+    const steps = document.querySelectorAll('.step');
+    const progressFill = document.getElementById('progressFill');
+    const stepIndicator = document.getElementById('stepIndicator');
+    const backBtn = document.getElementById('backBtn');
+    const skipBtn = document.getElementById('skipBtn');
+
+    // language
+    const langSel = document.getElementById('lang');
+    Object.keys(LOCALES).forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=LOCALES[k].name;langSel.appendChild(o)});
+    langSel.value='en';
+
+    function t(key){const l=langSel.value;return LOCALES[l][key]||LOCALES['en'][key]||key}
+
+    // upload zone
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const filesList = document.getElementById('filesList');
+
+    // pain slider
+    const pain = document.getElementById('pain');
+    const painLabel = document.getElementById('painLabel');
+    function updatePainLabel(){const v=+pain.value; if(v<=3) painLabel.textContent='Mild'; else if(v<=6) painLabel.textContent='Moderate'; else if(v<=8) painLabel.textContent='Severe'; else painLabel.textContent='Very Severe'}
+    pain.addEventListener('input',updatePainLabel); updatePainLabel();
+
+    // step controls
+    document.getElementById('toStep2').addEventListener('click',()=>goToStep(2));
+    document.getElementById('skipReports').addEventListener('click',()=>{state.files=[]; state.ocrText=''; state.ocrPromises=[]; updateFilesList(); goToStep(2)});
+    document.getElementById('toStep3').addEventListener('click',()=>goToStep(3));
+    document.getElementById('toStep4').addEventListener('click',()=>goToStep(4));
+    document.getElementById('toStep5').addEventListener('click',()=>goToStep(5));
+    document.getElementById('toStep6').addEventListener('click',generateBrief);
+    document.getElementById('backBtn').addEventListener('click',()=>goToStep(Math.max(1,state.step-1)));
+    document.getElementById('restartBtn').addEventListener('click',restart);
+    document.getElementById('printBtn').addEventListener('click',printBrief);
+    document.getElementById('shareBtn').addEventListener('click',shareBrief);
+
+    // file interactions
+    uploadZone.addEventListener('click',()=>fileInput.click());
+    uploadZone.addEventListener('dragover',e=>{e.preventDefault();uploadZone.classList.add('drag')});
+    uploadZone.addEventListener('dragleave',e=>{uploadZone.classList.remove('drag')});
+    uploadZone.addEventListener('drop',e=>{e.preventDefault();uploadZone.classList.remove('drag');handleFiles(e.dataTransfer.files)});
+    fileInput.addEventListener('change',e=>handleFiles(e.target.files));
+
+    function handleFiles(list){const arr=Array.from(list); arr.forEach(f=>{
+      try{
+        const detectedType = f.type ||
+          (f.name.match(/\.pdf$/i) ? 'application/pdf' :
+           f.name.match(/\.png$/i) ? 'image/png' :
+           f.name.match(/\.jpe?g$/i) ? 'image/jpeg' : '');
+        if(!detectedType){ notify('Unsupported file type: ' + escapeHtml(f.name),'error'); return; }
+        if(f.size > MAX_FILE_SIZE){ notify(`File too large (max 10MB): ${escapeHtml(f.name)}`,'error'); return; }
+        const total = state.files.reduce((s,x)=>s + (x.size||0),0) + f.size;
+        if(total > MAX_TOTAL_SIZE){ notify('Total upload size exceeds 30MB limit','error'); return; }
+
+        const reader=new FileReader();
+        reader.onerror = (e)=>{ notify('Error reading file: '+f.name,'error'); };
+        reader.onload=ev=>{
+          const dataUrl = ev.target.result || '';
+          const base64 = dataUrl.split(',')[1] || '';
+          state.files.push({name:f.name,type:detectedType,base64:base64,size:f.size}); updateFilesList(); clearNotify();
+          if(detectedType.startsWith('image/')){
+            const task = runImageOcr(f);
+            if(task && typeof task.then === 'function') trackOcrPromise(task);
+          }
+        };
+        reader.readAsDataURL(f);
+      }catch(err){ console.error('handleFiles error',err); notify('Unexpected error handling files','error') }
+    })}
+
+    async function runImageOcr(file){
+      if(!window.Tesseract || !file) return;
+      try{
+        notify(`Reading text from ${file.name}...`);
+        const result = await Tesseract.recognize(file, 'eng');
+        const text = String(result?.data?.text || '').trim();
+        if(text){
+          state.ocrText = [state.ocrText, `FILE: ${file.name}\n${text}`].filter(Boolean).join('\n\n').slice(0, 8000);
+          clearNotify();
+        }
+      }catch(err){
+        console.warn('OCR error', err);
+      }
+    }
+
+    function updateFilesList(){ if(state.files.length===0) filesList.textContent='No files selected'; else filesList.innerHTML = state.files.map(f=>`• ${f.name} (${f.type})`).join('<br>'); }
+    updateFilesList();
+
+    function goToStep(n) {
+      state.step = n;
+      for (const s of steps) {
+        s.classList.remove('active', 'visible');
+        if (+s.dataset.step === n) {
+          s.classList.add('active');
+          requestAnimationFrame(() => requestAnimationFrame(() => s.classList.add('visible')));
+        }
+      }
+      updateProgress();
+    }
+
+    function updateProgress(){
+      const pct = ((state.step-1)/(steps.length-1))*100;
+      progressFill.style.width = pct + '%';
+      stepIndicator.textContent = `Step ${state.step} of ${steps.length}`;
+      const hideSkip = state.step === 5 || state.step === 6 || state.step === 7;
+      skipBtn.style.display = hideSkip ? 'none' : '';
+      backBtn.style.display = state.step === 1 ? 'none' : '';
+    }
+    skipBtn.addEventListener('click',()=>{
+      if(state.step === 1){ state.files=[]; state.ocrText=''; state.ocrPromises=[]; updateFilesList(); goToStep(2); return; }
+      if(state.step >= 2 && state.step <= 4){ goToStep(state.step + 1); return; }
+    });
+    updateProgress();
+
+    // build structured prompt
+    function collectData(){return {
+      name:document.getElementById('name').value||'', age:document.getElementById('age').value||'', gender:document.getElementById('gender').value||'', weight:document.getElementById('weight').value||'', height:document.getElementById('height').value||'', city:document.getElementById('city').value||'',
+      conditions:document.getElementById('conditions').value||'', medicines:document.getElementById('medicines').value||'', supplements:document.getElementById('supplements').value||'', allergies:document.getElementById('allergies').value||'',
+      diet:document.getElementById('diet').value||'', steps:document.getElementById('steps').value||'', heartrate:document.getElementById('heartrate').value||'', sleep:document.getElementById('sleep').value||'', stress:document.getElementById('stress').value||'',
+      complaints:document.getElementById('complaints').value||'', painLocation:document.getElementById('painLocation').value||'', duration:document.getElementById('duration').value||'', painSeverity:document.getElementById('pain').value||'', modifiers:document.getElementById('modifiers').value||''
+    }}
+
+    function clip(v){ return String(v || '').trim().slice(0, MAX_FIELD_CHARS); }
+
+    // Generation flow
+    let genTexts = ['Reading your reports...','Analyzing your health context...','Preparing your brief...','Almost ready...'];
+    async function generateBrief(){
+      // collect
+      const data = collectData();
+      state.form = data;
+      goToStep(6);
+
+      // cycling messages and UI lock
+      const genTextEl = document.getElementById('genText');
+      let idx=0; const int = setInterval(()=>{try{genTextEl.textContent = genTexts[idx%genTexts.length]; idx++}catch(e){}},900);
+      disableAllControls(true);
+      notify('Generating brief — this may take a moment...');
+
+      if(state.ocrPromises.length){
+        notify('Reading your reports...');
+        await Promise.allSettled([...state.ocrPromises]);
+      }
+
+      // Compose compact structured prompt to minimize token usage.
+      const lines = [
+        ['NAME', clip(data.name)],
+        ['AGE', clip(data.age)],
+        ['GENDER', clip(data.gender)],
+        ['WEIGHT_KG', clip(data.weight)],
+        ['HEIGHT_CM', clip(data.height)],
+        ['CITY', clip(data.city)],
+        ['KNOWN_CONDITIONS', clip(data.conditions)],
+        ['CURRENT_MEDICINES', clip(data.medicines)],
+        ['SUPPLEMENTS', clip(data.supplements)],
+        ['ALLERGIES', clip(data.allergies)],
+        ['DIET', clip(data.diet)],
+        ['AVG_STEPS', clip(data.steps)],
+        ['AVG_HEART_RATE', clip(data.heartrate)],
+        ['AVG_SLEEP_HRS', clip(data.sleep)],
+        ['STRESS_LEVEL', clip(data.stress)],
+        ['COMPLAINTS', clip(data.complaints)],
+        ['PAIN_LOCATION', clip(data.painLocation)],
+        ['DURATION', clip(data.duration)],
+        ['PAIN_SEVERITY', clip(data.painSeverity)],
+        ['MODIFIERS', clip(data.modifiers)]
+      ].map(([k, v]) => `${k}: ${v || 'NA'}`).join('\n');
+
+      const textPrompt =
+        'IMPORTANT: Respond ONLY with valid JSON. No markdown/code fences/explanations.\n' +
+        'Return ONLY this object: {"summary":"...","suggestions":"...","priority_tests":["..."],"questions_for_doctor":["..."],"important_notes":"...","report_findings":"..."}.\n' +
+        'Rules: non-diagnostic language; concise but specific; if reports exist, label HIGH/LOW/NORMAL/BORDERLINE/NOT CLEAR.\n\n' +
+        lines;
+
+      const ocrText = state.ocrText ? `\n\nOCR_TEXT_FROM_UPLOADED_REPORTS:\n${state.ocrText.slice(0, 8000)}` : '';
+
+      const parts = [{ text: textPrompt + ocrText }];
+      const filesForAi = state.files.slice(0, MAX_FILES_FOR_AI);
+      if(state.files.length > filesForAi.length){
+        notify(`To reduce quota usage, analyzing first ${filesForAi.length} files this run.`);
+      }
+      filesForAi.forEach(f => {
+        const mimeType = f.type || (f.name.match(/\.pdf$/i) ? 'application/pdf' : f.name.match(/\.png$/i) ? 'image/png' : 'image/jpeg');
+        parts.push({ inline_data: { mime_type: mimeType, data: f.base64 } });
+      });
+
+      const body = {
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.8,
+          maxOutputTokens: 700,
+          thinkingConfig: { thinkingBudget: 0 }
+        }
+      };
+
+      try{
+        const controller = new AbortController();
+        const timeout = setTimeout(()=>controller.abort(), 45000);
+        const resp = await fetch(GEMINI_ENDPOINT, {
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body), signal: controller.signal
+        });
+        clearTimeout(timeout);
+        const text = await resp.text();
+        clearInterval(int);
+
+        if(!resp.ok){
+          // Handle specific API errors with helpful messages
+          let errorMsg = `Error ${resp.status}: `;
+          if(resp.status === 429){
+            errorMsg = '⏳ API Rate Limited: Free tier quota exceeded. This resets daily. Please wait 24 hours or verify your API key quota at https://ai.google.dev/gemini-api/docs/rate-limits';
+          } else if(resp.status === 401 || resp.status === 403){
+            errorMsg = '🔑 API Key Invalid: Check your GEMINI_API_KEY environment variable.';
+          } else if(resp.status === 400 && text.includes('input')){
+            errorMsg = '📝 Invalid Request Format: The data sent to API was malformed.';
+          } else {
+            errorMsg += text.substring(0, 500);
+          }
+          notifyWithActions(errorMsg);
+          // show structured summary and raw response
+          document.getElementById('summaryCard').innerHTML = renderNarrativeBrief(state.form);
+          renderAssessmentFallback(text);
+          goToStep(7); disableAllControls(false); return;
+        }
+
+        const final = extractGeminiJson(text);
+        if(final){ renderFinal(final); }
+        else {
+          const fallback = text || 'No response returned.';
+          document.getElementById('summaryCard').innerHTML = renderNarrativeBrief(state.form);
+          renderAssessmentFallback(fallback);
+        }
+        goToStep(7);
+        disableAllControls(false);
+
+      }catch(err){
+        clearInterval(int);
+        console.error(err);
+        if(err.name === 'AbortError') notifyWithActions('Request timed out. Try again or enable proxy mode.');
+        else if(err instanceof TypeError) notifyWithActions('Network or CORS error. If you see a CORS message, run the included proxy and enable proxy mode.');
+        else notifyWithActions('Error generating brief: ' + err.message);
+        document.getElementById('summaryCard').innerHTML = renderNarrativeBrief(state.form);
+        renderAssessmentFallback(String(err && err.message ? err.message : 'Generation failed.'));
+        goToStep(7);
+        disableAllControls(false);
+      }
+    }
+
+    function notifyWithActions(message){
+      notify(`${escapeHtml(message)}<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button id="retryGenerateBtn" class="primary" type="button">Try Again</button><button id="goBackStep5Btn" type="button">Go Back</button></div>`,'error');
+      const retry = document.getElementById('retryGenerateBtn');
+      const goBack = document.getElementById('goBackStep5Btn');
+      if(retry) retry.addEventListener('click', ()=>generateBrief());
+      if(goBack) goBack.addEventListener('click', ()=>goToStep(5));
+    }
+
+    function disableAllControls(dis){
+      document.querySelectorAll('button,input,textarea,select').forEach(e=>{try{e.disabled = !!dis}catch(e){}});
+      if(!dis) document.getElementById('pain').disabled = false;
+      if(!dis){
+        updateProgress();
+      }
+    }
+
+    function renderFinal(obj){
+      document.getElementById('summaryCard').innerHTML = renderNarrativeBrief(state.form, obj.summary || '', obj.report_findings || '');
+
+      const ai = document.getElementById('aiAssessment');
+      const suggestions = `<h4>What your data suggests</h4><div>${escapeHtml(obj.suggestions || 'No analysis provided.')}</div>`;
+      const tests = `<h4>Priority tests to discuss with your doctor</h4><ul>${(obj.priority_tests||[]).length ? (obj.priority_tests||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('') : '<li>Consult with your doctor for specific test recommendations.</li>'}</ul>`;
+      const q = `<h4>Questions to ask your doctor</h4><ul>${(obj.questions_for_doctor||[]).length ? (obj.questions_for_doctor||[]).map(x=>`<li>${escapeHtml(x)}</li>`).join('') : '<li>Ask your doctor what follow-up is needed.</li>'}</ul>`;
+      const notes = `<h4>Important notes</h4><div>${escapeHtml(obj.important_notes || 'No urgent concerns noted.')}</div>`;
+      ai.innerHTML = suggestions + tests + q + notes;
+    }
+
+    function renderAssessmentFallback(rawText){
+      const ai = document.getElementById('aiAssessment');
+      ai.innerHTML = `<h4>What your data suggests</h4><div>Unable to parse structured AI output. Raw response is shown below.</div><h4>Priority tests to discuss with your doctor</h4><ul><li>Please retry generation for structured test suggestions.</li></ul><h4>Questions to ask your doctor</h4><ul><li>Ask your doctor what immediate evaluation is recommended.</li></ul><h4>Important notes</h4><pre style="white-space:pre-wrap;font-size:12px">${escapeHtml(String(rawText || 'No response returned.'))}</pre>`;
+    }
+
+    function renderNarrativeBrief(f, modelSummary='', reportFindings=''){
+      const painLevel = describePainLevel(+f.painSeverity || 0);
+      const location = f.painLocation ? `Pain/discomfort is reported around ${f.painLocation}.` : 'Pain/discomfort location was not specified.';
+      const duration = f.duration ? `It has been going on for ${f.duration}.` : 'Duration was not clearly specified.';
+      const modifiers = f.modifiers ? `It gets ${f.modifiers}.` : '';
+      const lifestyle = [
+        f.diet ? `Diet this week: ${f.diet}` : '',
+        f.steps ? `Average daily steps: ${f.steps}` : '',
+        f.heartrate ? `Average heart rate: ${f.heartrate}` : '',
+        f.sleep ? `Average sleep: ${f.sleep} hours` : '',
+        f.stress ? `Stress level: ${f.stress}` : ''
+      ].filter(Boolean).join(' • ');
+      const meds = [
+        f.conditions ? `Known conditions include ${f.conditions}.` : 'No known conditions were reported.',
+        f.medicines ? `Current medicines: ${f.medicines}.` : 'No current medicines were reported.',
+        f.supplements ? `Supplements: ${f.supplements}.` : 'No supplements were reported.',
+        f.allergies ? `Allergies: ${f.allergies}.` : 'No allergies were reported.'
+      ].join(' ');
+      const intro = `${escapeHtml(f.name||'The patient')}, ${escapeHtml(f.age || '')} years old${f.gender ? `, ${escapeHtml(f.gender)}` : ''}${f.city ? `, from ${escapeHtml(f.city)}` : ''}, is preparing for a consultation.`;
+      const complaint = f.complaints ? `Main complaint: ${f.complaints}.` : 'Main complaint was not clearly provided.';
+      const reportSection = reportFindings
+        ? `<p style="margin:0 0 10px 0"><strong>Report interpretation:</strong> ${formatReportFindings(reportFindings)}</p>`
+        : '<p style="margin:0 0 10px 0"><strong>Report interpretation:</strong> No reports uploaded.</p>';
+
+      return `
+        <div style="font-size:14px;line-height:1.55">
+          <p style="margin:0 0 10px 0"><strong>Name:</strong> ${escapeHtml(f.name || 'Not provided')} | <strong>Age:</strong> ${escapeHtml(f.age || 'Not provided')} | <strong>Gender:</strong> ${escapeHtml(f.gender || 'Not provided')}</p>
+          <p style="margin:0 0 10px 0"><strong>Weight:</strong> ${escapeHtml(f.weight || 'Not provided')} kg | <strong>Height:</strong> ${escapeHtml(f.height || 'Not provided')} cm | <strong>City:</strong> ${escapeHtml(f.city || 'Not provided')}</p>
+          <p style="margin:0 0 10px 0">${intro}</p>
+          <p style="margin:0 0 10px 0">${complaint} ${location} ${duration} ${modifiers} Pain severity is ${painLevel}.</p>
+          <p style="margin:0 0 10px 0"><strong>Health background:</strong> ${escapeHtml(meds)}</p>
+          ${lifestyle ? `<p style="margin:0 0 10px 0"><strong>Lifestyle:</strong> ${escapeHtml(lifestyle)}</p>` : ''}
+          ${reportSection}
+          ${modelSummary ? `<p style="margin:0"><strong>AI Clinical Summary:</strong> ${escapeHtml(modelSummary)}</p>` : ''}
+        </div>`;
+    }
+
+    function restart(){
+      state.step=1; state.files=[]; state.ocrText=''; state.ocrPromises=[]; document.querySelectorAll('input,textarea').forEach(i=>{if(i.type!=='range')i.value=''}); document.getElementById('pain').value=3; updatePainLabel(); updateFilesList(); clearNotify(); goToStep(1);
+    }
+
+    function describePainLevel(value){
+      if(value <= 3) return 'mild';
+      if(value <= 6) return 'moderate';
+      if(value <= 8) return 'severe';
+      return 'very severe';
+    }
+
+    function formatReportFindings(text){
+      const raw = String(text || '').trim();
+      if(!raw) return 'No reports uploaded.';
+      const normalized = raw
+        .replace(/\r\n/g, '\n')
+        .replace(/\u2022/g, '\n- ')
+        .replace(/\b(HIGH|LOW|NORMAL|BORDERLINE|NOT CLEAR)\b/gi, '<strong>$1</strong>');
+      const lines = normalized
+        .split(/\n+/)
+        .map(line => line.trim())
+        .filter(Boolean);
+      if(lines.length <= 1) return escapeHtml(normalized).replace(/\n/g, '<br>');
+      return `<ul style="margin:8px 0 0 18px;padding:0">${lines.map(line => `<li>${escapeHtml(line).replace(/\b(HIGH|LOW|NORMAL|BORDERLINE|NOT CLEAR)\b/gi, '<strong>$1</strong>')}</li>`).join('')}</ul>`;
+    }
+
+    function extractGeminiJson(text){
+      const parseCandidate = (raw) => {
+        try { return JSON.parse(raw); } catch (e) { return null; }
+      };
+
+      const raw = String(text || '').trim();
+      let parsed = parseCandidate(raw);
+
+      if(parsed && parsed.candidates && parsed.candidates[0]){
+        const parts = parsed.candidates[0].content && parsed.candidates[0].content.parts ? parsed.candidates[0].content.parts : [];
+        const joined = parts.map(p => p.text || '').join('\n').trim();
+        parsed = parseCandidate(joined) || parseCandidate(joined.replace(/```json|```/gi, '').trim());
+        if(!parsed){
+          const startJoined = joined.indexOf('{');
+          const endJoined = joined.lastIndexOf('}');
+          if(startJoined !== -1 && endJoined !== -1 && endJoined > startJoined){
+            parsed = parseCandidate(joined.slice(startJoined, endJoined + 1));
+          }
+        }
+      }
+
+      if(parsed) return normalizeGeminiObject(parsed);
+
+      const noFences = raw.replace(/```json|```/gi, '').trim();
+      parsed = parseCandidate(noFences);
+      if(parsed) return normalizeGeminiObject(parsed);
+
+      const start = noFences.indexOf('{');
+      const end = noFences.lastIndexOf('}');
+      if(start !== -1 && end !== -1 && end > start){
+        const jsonStr = noFences.slice(start, end + 1);
+        parsed = parseCandidate(jsonStr);
+        if(parsed) return normalizeGeminiObject(parsed);
+      }
+
+      return null;
+    }
+
+    async function shareBrief(){
+      const shareData = {
+        title: 'DocBrief',
+        text: 'My pre-consultation health brief is ready.',
+        url: window.location.href
+      };
+      try{
+        if(navigator.share){
+          await navigator.share(shareData);
+          notify('Brief shared successfully.');
+        } else {
+          await navigator.clipboard.writeText(window.location.href);
+          notify('Link copied to clipboard.');
+        }
+      }catch(err){
+        notify('Unable to share right now.','error');
+      }
+    }
+
+    function printBrief(){
+      const printable = document.getElementById('printable');
+      if(!printable){
+        notify('Nothing to print yet.','error');
+        return;
+      }
+
+      const printStyles = `
+        <style>
+          body{margin:0;padding:24px;font-family:'DM Sans',Arial,sans-serif;color:#111;background:#fff;}
+          h1,h3,h4{font-family:'Syne',Arial,sans-serif;color:#111;margin:0 0 10px 0;}
+          .results-grid{display:block;}
+          .card{border:1px solid #e0e6ef;border-radius:12px;padding:16px;margin:0 0 16px 0;box-shadow:none;}
+          .summary-card{background:#f8fbff;color:#0d1a2a;border-left:6px solid #00e5b0;}
+          .assessment-card{background:#fff;border-left:6px solid #4f8aff;}
+          ul{margin:8px 0 0 18px;padding:0;}
+          pre{white-space:pre-wrap;font-size:12px;}
+          @page{margin:14mm;}
+        </style>
+      `;
+
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>DocBrief</title>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+        ${printStyles}
+      </head><body>${printable.innerHTML}</body></html>`;
+
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      if(!printWindow){
+        notify('Popup blocked. Please allow popups to print.','error');
+        return;
+      }
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+
+      const triggerPrint = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+
+      if(printWindow.document.readyState === 'complete'){
+        setTimeout(triggerPrint, 250);
+      } else {
+        printWindow.onload = () => setTimeout(triggerPrint, 250);
+      }
+      printWindow.onafterprint = () => printWindow.close();
+    }
+
+    function normalizeGeminiObject(obj){
+      if(!obj || typeof obj !== 'object') return null;
+      return {
+        summary: String(obj.summary || obj.raw || ''),
+        suggestions: String(obj.suggestions || ''),
+        priority_tests: Array.isArray(obj.priority_tests) ? obj.priority_tests : [],
+        questions_for_doctor: Array.isArray(obj.questions_for_doctor) ? obj.questions_for_doctor : [],
+        important_notes: String(obj.important_notes || ''),
+        report_findings: String(obj.report_findings || 'No reports uploaded.')
+      };
+    }
+
+    function escapeHtml(s){if(!s) return ''; return s.replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+
+    // language change updates a few labels
+    langSel.addEventListener('change',()=>{
+      document.getElementById('s1title').textContent = t('start');
+      document.getElementById('toStep2').textContent = t('continue');
+      document.getElementById('toStep3').textContent = t('continue');
+      document.getElementById('toStep4').textContent = t('continue');
+      document.getElementById('toStep5').textContent = t('continue');
+      document.getElementById('toStep6').textContent = t('generate');
+      document.getElementById('skipBtn').textContent = t('skip');
+    });
+
+    // initial labels
+    langSel.dispatchEvent(new Event('change'));
+
+  </script>
+</body>
+</html>
